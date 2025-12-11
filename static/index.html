@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comic Translator MVP - Día 5</title>
+    <style>
+        body { font-family: sans-serif; background: #222; color: #fff; text-align: center; padding: 20px; }
+        .container { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        #canvas-container { position: relative; border: 2px solid #555; display: inline-block; }
+        canvas { max-width: 100%; height: auto; display: block; }
+        .controls { background: #333; padding: 20px; border-radius: 10px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; cursor: pointer; font-size: 16px; border-radius: 5px; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        .loader { display: none; color: #f39c12; font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>🦇 Comic Translator: Generación Final</h1>
+    
+    <div class="controls">
+        <input type="file" id="fileInput" accept="image/*">
+        <button onclick="processComic()" id="btnProcesar">Traducir Cómic</button>
+        <div id="loader" class="loader">Procesando... (Esto tarda unos segundos por la IA) ⏳</div>
+    </div>
+
+    <div id="resultArea" style="display:none; margin-top:20px;">
+        <h3>Resultado Final:</h3>
+        <div id="canvas-container">
+            <canvas id="comicCanvas"></canvas>
+        </div>
+        <p><small>Nota: Si el texto sale mal alineado, es culpa del Joker (y del MVP).</small></p>
+    </div>
+
+    <script>
+        async function processComic() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) return alert("¡Sube una imagen primero!");
+
+            // UI Feedback
+            const btn = document.getElementById('btnProcesar');
+            const loader = document.getElementById('loader');
+            btn.disabled = true;
+            loader.style.display = 'block';
+
+            // Preparar envío
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                // 1. LLAMADA A TU API BACKEND
+                const response = await fetch('/api/v1/translate-page', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.error) throw new Error(data.error);
+
+                // 2. RENDERIZADO VISUAL
+                renderComic(file, data.blocks);
+                
+                document.getElementById('resultArea').style.display = 'block';
+
+            } catch (err) {
+                alert("Error: " + err.message);
+            } finally {
+                btn.disabled = false;
+                loader.style.display = 'none';
+            }
+        }
+
+        function renderComic(file, blocks) {
+            const canvas = document.getElementById('comicCanvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = () => {
+                // Ajustar canvas al tamaño real de la imagen
+                canvas.width = img.width;
+                canvas.height = img.height;
+                
+                // A. Dibujar imagen original de fondo
+                ctx.drawImage(img, 0, 0);
+
+                // B. Dibujar bocadillos y texto traducido encima
+                blocks.forEach(block => {
+                    const { x, y, w, h } = block.box;
+                    const text = block.translated;
+
+                    // 1. El Bocadillo Blanco (Limpieza visual "low cost")
+                    ctx.fillStyle = "white";
+                    // Hacemos el cuadro un pelín más grande que el original para tapar bien
+                    ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+                    
+                    // 2. Borde negro al bocadillo (estilo cómic)
+                    ctx.strokeStyle = "black";
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+
+                    // 3. El Texto
+                    ctx.fillStyle = "black";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    
+                    // Ajuste de fuente dinámico (chapuza funcional)
+                    const fontSize = Math.max(10, h * 0.6); 
+                    ctx.font = `bold ${fontSize}px Arial`;
+                    
+                    // Escribir en el centro de la caja
+                    ctx.fillText(text, x + w / 2, y + h / 2 + 2, w); 
+                });
+            };
+            
+            img.src = URL.createObjectURL(file);
+        }
+    </script>
+</body>
+</html>
